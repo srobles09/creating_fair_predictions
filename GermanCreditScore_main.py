@@ -4,11 +4,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sbn
 from sklearn.model_selection import train_test_split
+# Metrics
 from sklearn.metrics import accuracy_score
 from aif360.metrics import BinaryLabelDatasetMetric
+from aif360.metrics import ClassificationMetric
+# Data
 from aif360.datasets import BinaryLabelDataset
+# Explainer
 from aif360.explainers import MetricTextExplainer
 import sys
+import copy as cp
 sys.path.append("D:/Sandy Oaks/Documents/Grad School/F20_MATH-5027/Code!/creating_fair_predictions/")
 import discovery_metrics as dm
 import model_creation as mc
@@ -206,18 +211,220 @@ nb_model = mc.create_naive_bayes_model(data_dev,dep_var, cat_vars=cat_vars)
 
 ##---------------------- Post-model Bias Detection ----------------------##
 # Create predictions
+(X_scaled_dev,y) = mc.clean_the_data(data_dev[to_subset],dep_var, cat_vars, scale_me=True)
+(X_unscaled_dev,y) = mc.clean_the_data(data_dev[to_subset],dep_var, cat_vars, scale_me=False)
 (X_scaled,y) = mc.clean_the_data(data_val[to_subset],dep_var, cat_vars, scale_me=True)
 (X_unscaled,y) = mc.clean_the_data(data_val[to_subset],dep_var, cat_vars, scale_me=False)
 del y # Using an internal function for the data cleaning, which outputs extraneous info (y)
-pred_lr = lr_model.predict(X_scaled)
-pred_rf = rf_model.predict(X_unscaled)
-pred_nb = nb_model.predict(X_unscaled)
+pred_lr_dev = lr_model.predict(X_scaled_dev)
+pred_rf_dev = rf_model.predict(X_unscaled_dev)
+pred_nb_dev = nb_model.predict(X_unscaled_dev)
+pred_lr_val = lr_model.predict(X_scaled)
+pred_rf_val = rf_model.predict(X_unscaled)
+pred_nb_val = nb_model.predict(X_unscaled)
 
 
+### AIF360 Objects (again... yes we're killing efficiency by having so many near-identical replicas)
+# Logistic Regression
+dat_aif_dev_pred_lr = data_dev.copy(deep=True)
+dat_aif_dev_pred_lr[dep_var] = pred_lr_dev
+dat_aif_val_pred_lr = data_val.copy(deep=True)
+dat_aif_val_pred_lr[dep_var] = pred_lr_val
+dat_aif_dev_pred_lr = pd.get_dummies(dat_aif_dev_pred_lr, columns=cat_vars,drop_first=True)
+dat_aif_val_pred_lr = pd.get_dummies(dat_aif_val_pred_lr, columns=cat_vars,drop_first=True)
+# Random Forest
+dat_aif_dev_pred_rf = data_dev.copy(deep=True)
+dat_aif_dev_pred_rf[dep_var] = pred_rf_dev
+dat_aif_val_pred_rf = data_val.copy(deep=True)
+dat_aif_val_pred_rf[dep_var] = pred_rf_val
+dat_aif_dev_pred_rf = pd.get_dummies(dat_aif_dev_pred_rf, columns=cat_vars,drop_first=True)
+dat_aif_val_pred_rf = pd.get_dummies(dat_aif_val_pred_rf, columns=cat_vars,drop_first=True)
+
+# Naive Bayes
+dat_aif_dev_pred_nb = data_dev.copy(deep=True)
+dat_aif_dev_pred_nb[dep_var] = pred_nb_dev
+dat_aif_val_pred_nb = data_val.copy(deep=True)
+dat_aif_val_pred_nb[dep_var] = pred_nb_val
+dat_aif_dev_pred_nb = pd.get_dummies(dat_aif_dev_pred_nb, columns=cat_vars,drop_first=True)
+dat_aif_val_pred_nb = pd.get_dummies(dat_aif_val_pred_nb, columns=cat_vars,drop_first=True)
+
+### Create BinaryLabelDatasets
+# LR
+dat_aif_gender_dev_lr = BinaryLabelDataset(df=dat_aif_dev_pred_lr,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+
+dat_aif_age_dev_lr = BinaryLabelDataset(df=dat_aif_dev_pred_lr,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+dat_aif_both_dev_lr = BinaryLabelDataset(df=dat_aif_dev_pred_lr,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender','age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=[0,0])
+
+dat_aif_gender_lr = BinaryLabelDataset(df=dat_aif_val_pred_lr,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+
+dat_aif_age_val_lr = BinaryLabelDataset(df=dat_aif_val_pred_lr,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+dat_aif_both_val_lr = BinaryLabelDataset(df=dat_aif_val_pred_lr,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender','age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=[0,0])
+
+# RF
+dat_aif_gender_dev_rf = BinaryLabelDataset(df=dat_aif_dev_pred_rf,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+
+dat_aif_age_dev_rf = BinaryLabelDataset(df=dat_aif_dev_pred_rf,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+dat_aif_both_dev_rf = BinaryLabelDataset(df=dat_aif_dev_pred_rf,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender','age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=[0,0])
+
+dat_aif_gender_rf = BinaryLabelDataset(df=dat_aif_val_pred_rf,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+
+dat_aif_age_val_rf = BinaryLabelDataset(df=dat_aif_val_pred_rf,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+dat_aif_both_val_rf = BinaryLabelDataset(df=dat_aif_val_pred_rf,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender','age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=[0,0])
+
+# NB
+dat_aif_gender_dev_nb = BinaryLabelDataset(df=dat_aif_dev_pred_nb,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+
+dat_aif_age_dev_nb = BinaryLabelDataset(df=dat_aif_dev_pred_nb,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+dat_aif_both_dev_nb = BinaryLabelDataset(df=dat_aif_dev_pred_nb,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender','age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=[0,0])
+
+dat_aif_gender_nb = BinaryLabelDataset(df=dat_aif_val_pred_nb,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+
+dat_aif_age_val_nb = BinaryLabelDataset(df=dat_aif_val_pred_nb,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=0)
+dat_aif_both_val_nb = BinaryLabelDataset(df=dat_aif_val_pred_nb,
+                                  label_names=['credit'],
+                                  protected_attribute_names=['gender','age'],
+                                  favorable_label=1,
+                                  unfavorable_label=0,
+                                  unprivileged_protected_attributes=[0,0])
+
+
+
+## Dev vs LR Predictions
+postprocessing_dev_gender_lr = ClassificationMetric(
+                dat_aif_gender, dat_aif_gender_dev_lr,
+                unprivileged_groups=unpriv_gender,
+                privileged_groups=priv_gender)
+
+postprocessing_dev_age_lr = ClassificationMetric(
+                dat_aif_age, dat_aif_age_dev_lr,
+                unprivileged_groups=unpriv_age,
+                privileged_groups=priv_age)
+
+postprocessing_dev_both_lr = ClassificationMetric(
+                dat_aif_both, dat_aif_both_dev_lr,
+                unprivileged_groups=unpriv_both,
+                privileged_groups=priv_both)
+
+## Dev vs RF Predictions
+postprocessing_dev_gender_rf = ClassificationMetric(
+                dat_aif_gender, dat_aif_gender_dev_rf,
+                unprivileged_groups=unpriv_gender,
+                privileged_groups=priv_gender)
+
+postprocessing_dev_age_rf = ClassificationMetric(
+                dat_aif_age, dat_aif_age_dev_rf,
+                unprivileged_groups=unpriv_age,
+                privileged_groups=priv_age)
+
+postprocessing_dev_both_rf = ClassificationMetric(
+                dat_aif_both, dat_aif_both_dev_rf,
+                unprivileged_groups=unpriv_both,
+                privileged_groups=priv_both)
+
+## Dev vs LR Predictions
+postprocessing_dev_gender_nb = ClassificationMetric(
+                dat_aif_gender, dat_aif_gender_dev_nb,
+                unprivileged_groups=unpriv_gender,
+                privileged_groups=priv_gender)
+
+postprocessing_dev_age_nb = ClassificationMetric(
+                dat_aif_age, dat_aif_age_dev_nb,
+                unprivileged_groups=unpriv_age,
+                privileged_groups=priv_age)
+
+postprocessing_dev_both_nb = ClassificationMetric(
+                dat_aif_both, dat_aif_both_dev_nb,
+                unprivileged_groups=unpriv_both,
+                privileged_groups=priv_both)
 
 ##---------------------- Correction ----------------------##
 
 
-accuracy_score(data_val[dep_var],pred_lr)
-accuracy_score(data_val[dep_var],pred_rf)
-accuracy_score(data_val[dep_var],pred_nb)
+accuracy_score(data_val[dep_var],pred_lr_dev)
+accuracy_score(data_val[dep_var],pred_rf_dev)
+accuracy_score(data_val[dep_var],pred_nb_dev)
