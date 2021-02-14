@@ -4,16 +4,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sbn
 from sklearn.model_selection import train_test_split
-# Metrics
-from sklearn.metrics import accuracy_score
+# Metrics & Correction
+from sklearn.metrics import accuracy_score, confusion_matrix
 from aif360.metrics import BinaryLabelDatasetMetric
 from aif360.metrics import ClassificationMetric
+from aif360.algorithms.preprocessing.reweighing import Reweighing
 # Data
 from aif360.datasets import BinaryLabelDataset
 # Explainer
 from aif360.explainers import MetricTextExplainer
 import sys
-import copy as cp
 sys.path.append("D:/Sandy Oaks/Documents/Grad School/F20_MATH-5027/Code!/creating_fair_predictions/")
 import discovery_metrics as dm
 import model_creation as mc
@@ -32,6 +32,7 @@ data_path = 'https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/g
 
 
 ##---------------------- Read census income Data ----------------------##
+np.random.seed(1984)
 ## Read German Credit Data
 column_names = ['status', 'month', 'credit_history',
             'purpose', 'credit_amount', 'savings', 'employment',
@@ -77,6 +78,12 @@ to_subset =['status', 'month', 'credit_history', 'purpose', 'credit_amount',
        'other_debtors', 'residence_since', 'property', 'age',
        'installment_plans', 'housing', 'number_of_credits', 'skill_level',
        'people_liable_for', 'foreign_worker', 'credit', 'gender'] # This one is Independent + dep_var
+to_subset_noprotected =['status', 'month', 'credit_history', 'purpose', 'credit_amount',
+       'savings', 'employment', 'investment_as_income_percentage',
+       'other_debtors', 'residence_since', 'property',
+       'installment_plans', 'housing', 'number_of_credits', 'skill_level',
+       'people_liable_for', 'foreign_worker', 'credit'] 
+
 #weight_var = weights = {0:3.0, 1:1.0} # Class of 0 gets a weight of 3
 
 
@@ -204,9 +211,9 @@ stat_both, p_both = dm.get_difference_means_test(data1_both, data2_both)
 
 ##---------------------- Create models ----------------------##
 # Correction has not been carried out at this stage
-lr_model = mc.create_logistic_regression(data_dev,dep_var, cat_vars=cat_vars)
-rf_model = mc.create_random_forest_model(data_dev,dep_var, cat_vars=cat_vars)
-nb_model = mc.create_naive_bayes_model(data_dev,dep_var, cat_vars=cat_vars)
+lr_model = mc.create_logistic_regression(data_dev[to_subset],dep_var, cat_vars=cat_vars)
+rf_model = mc.create_random_forest_model(data_dev[to_subset],dep_var, cat_vars=cat_vars)
+nb_model = mc.create_naive_bayes_model(data_dev[to_subset],dep_var, cat_vars=cat_vars)
 
 
 ##---------------------- Post-model Bias Detection ----------------------##
@@ -424,7 +431,42 @@ postprocessing_dev_both_nb = ClassificationMetric(
 
 ##---------------------- Correction ----------------------##
 
+## Original Performance
+accuracy_score(data_val[dep_var],pred_lr_val)
+accuracy_score(data_val[dep_var],pred_rf_val)
+accuracy_score(data_val[dep_var],pred_nb_val)
 
-accuracy_score(data_val[dep_var],pred_lr_dev)
-accuracy_score(data_val[dep_var],pred_rf_dev)
-accuracy_score(data_val[dep_var],pred_nb_dev)
+conf_matrix_lr = confusion_matrix(data_val[dep_var],pred_lr_val)
+conf_matrix_rf = confusion_matrix(data_val[dep_var],pred_rf_val)
+conf_matrix_nb = confusion_matrix(data_val[dep_var],pred_nb_val)
+conf_sensitivity_lr = (conf_matrix_lr[1][1] / float(conf_matrix_lr[1][1] + conf_matrix_lr[1][0]))
+conf_specificity_lr = (conf_matrix_lr[0][0] / float(conf_matrix_lr[0][0] + conf_matrix_lr[0][1]))
+conf_sensitivity_rf = (conf_matrix_rf[1][1] / float(conf_matrix_rf[1][1] + conf_matrix_rf[1][0]))
+conf_specificity_rf = (conf_matrix_rf[0][0] / float(conf_matrix_rf[0][0] + conf_matrix_rf[0][1]))
+conf_sensitivity_nb = (conf_matrix_nb[1][1] / float(conf_matrix_nb[1][1] + conf_matrix_nb[1][0]))
+conf_specificity_nb = (conf_matrix_nb[0][0] / float(conf_matrix_nb[0][0] + conf_matrix_nb[0][1]))
+
+## Removing Factor
+lr_model_1 = mc.create_logistic_regression(data_dev[to_subset_noprotected],dep_var, cat_vars=cat_vars)
+rf_model_1 = mc.create_random_forest_model(data_dev[to_subset_noprotected],dep_var, cat_vars=cat_vars)
+nb_model_1 = mc.create_naive_bayes_model(data_dev[to_subset_noprotected],dep_var, cat_vars=cat_vars)
+
+del X_scaled; del X_scaled_dev; del X_unscaled; del X_unscaled_dev
+(X_scaled_dev,y) = mc.clean_the_data(data_dev[to_subset_noprotected],dep_var, cat_vars, scale_me=True)
+(X_unscaled_dev,y) = mc.clean_the_data(data_dev[to_subset_noprotected],dep_var, cat_vars, scale_me=False)
+(X_scaled,y) = mc.clean_the_data(data_val[to_subset_noprotected],dep_var, cat_vars, scale_me=True)
+(X_unscaled,y) = mc.clean_the_data(data_val[to_subset_noprotected],dep_var, cat_vars, scale_me=False)
+
+pred_lr_dev_1 = lr_model_1.predict(X_scaled_dev)
+pred_rf_dev_1 = rf_model_1.predict(X_unscaled_dev)
+pred_nb_dev_1 = nb_model_1.predict(X_unscaled_dev)
+pred_lr_val_1 = lr_model_1.predict(X_scaled)
+pred_rf_val_1 = rf_model_1.predict(X_unscaled)
+pred_nb_val_1 = nb_model_1.predict(X_unscaled)
+
+accuracy_score(data_val[dep_var],pred_lr_val_1)
+accuracy_score(data_val[dep_var],pred_rf_val_1)
+accuracy_score(data_val[dep_var],pred_nb_val_1)
+
+
+## Reweighing 
