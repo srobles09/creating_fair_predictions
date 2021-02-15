@@ -30,8 +30,7 @@ def create_logistic_regression(the_data,dep_var, weight_var=None, cat_vars=None,
 def create_random_forest_model(the_data, dep_var, weight_var=None, cat_vars = None):
     X,y= clean_the_data(the_data, dep_var, cat_vars,scale_me=False)
     if weight_var == None:
-        tree_model = RandomForestClassifier(n_estimators=100,max_depth=10,min_samples_split=100,
-                                            min_samples_leaf=25, random_state=1984).fit(X,y)
+        tree_model = RandomForestClassifier(n_estimators=100,max_depth=10, random_state=1984).fit(X,y)
     else:
         tree_model = 2
     return tree_model
